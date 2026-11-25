@@ -150,12 +150,13 @@ function buildServer() {
   server.registerTool(
     "find_mentions",
     {
-      title: "Find Montique's channel messages for Duet",
+      title: "Find Montique's channel messages",
       description:
-        "Find messages Montique wrote since a time, in Slack channels Duet is a member of, that @mention Duet " +
-        "or use @here. Includes replies inside threads. Only Montique's messages count; other people and bots are ignored. " +
-        "Each result has channel, ts, thread_ts (reply under this with post_thread_reply), in_thread, kind " +
-        "('mention' or 'here'), text, and answered (Duet already replied in that thread after it). " +
+        "Find messages Montique wrote since a time, in Slack channels Duet is a member of: any message, top level or " +
+        "in a thread, except ones that @mention someone else but not Duet and have no @here. Only Montique's messages " +
+        "count; other people and bots are ignored. Each result has channel, ts, thread_ts (reply under this with " +
+        "post_thread_reply), in_thread, kind ('mention' for @Duet, 'here' for @here, 'general' for everything else), " +
+        "text, and answered (Duet already replied in that thread after it). " +
         "Use checked_at as the next since.",
       inputSchema: {
         since: z.string().optional().describe("Only messages after this Slack ts or ISO date. Default: 24 hours ago."),
@@ -197,8 +198,8 @@ function buildServer() {
       title: "Reply as Duet in a channel thread",
       description:
         "Post a reply as Duet inside a thread in a Slack channel Duet is a member of. thread_ts is required; " +
-        "Duet never posts at the top level of a channel. Only works in a thread where Montique @mentioned Duet " +
-        "or used @here. The reply can't use @here, @channel or @everyone and isn't sent to the channel. Slack mrkdwn.",
+        "Duet never posts at the top level of a channel. Only works in a thread where Montique wrote something " +
+        "not addressed to someone else. The reply can't use @here, @channel or @everyone and isn't sent to the channel. Slack mrkdwn.",
       inputSchema: {
         channel: z.string().describe("Channel id (C... or G...)."),
         thread_ts: z.string().describe("ts of the thread's parent, or of Montique's message to start a thread under."),

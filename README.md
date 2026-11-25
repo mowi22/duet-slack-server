@@ -1,6 +1,6 @@
 # Duet Slack server
 
-A small remote MCP server that lets Claude read and reply as the **Duet** app in Slack: in Montique's DM with Duet (channel `D0CL9HPSCHM`), and in channel threads where Montique @mentions Duet or uses @here. Claude reaches it as a custom connector.
+A small remote MCP server that lets Claude read and reply as the **Duet** app in Slack: in Montique's DM with Duet (channel `D0CL9HPSCHM`), and in channel threads where Montique writes. Claude reaches it as a custom connector.
 
 DM tools, locked to that one DM in code:
 
@@ -9,17 +9,17 @@ DM tools, locked to that one DM in code:
 
 Channel tools (`channels.js`), limited to public and private channels Duet is a member of:
 
-- `find_mentions(since?, lookback_days?, channel?)` finds Montique's messages since a time that @mention Duet or contain @here (encoded or typed as a plain word), at the top level or inside threads (it also opens recent threads whose parent is older, up to `lookback_days`, default 7). Each result has `channel`, `ts`, `thread_ts` (where to reply), `in_thread`, `kind` (`mention` or `here`), `text` and `answered` (Duet already replied after it). `checked_at` is the next `since`.
+- `find_mentions(since?, lookback_days?, channel?)` finds Montique's messages since a time (kind `mention` for @Duet, `here` for @here, encoded or typed, `general` for anything else; messages that @mention someone else but not Duet are skipped), at the top level or inside threads (it also opens recent threads whose parent is older, up to `lookback_days`, default 7). Each result has `channel`, `ts`, `thread_ts` (where to reply), `in_thread`, `kind`, `text` and `answered` (Duet already replied after it). `checked_at` is the next `since`.
 - `read_thread(channel, thread_ts, limit?)` reads a whole thread. `thread_ts` can be the parent's or any reply's ts.
 - `post_thread_reply(channel, thread_ts, text)` replies as Duet inside that thread.
 
-Rules enforced in code: only Montique's own messages (`U0CL7D29R71`) count, never other people's or bots'; Duet only replies inside a thread where Montique mentioned it or used @here; never at the top level of a channel, never broadcast to the channel, and never with @here, @channel, @everyone or a group ping in its own text.
+Rules enforced in code: only Montique's own messages (`U0CL7D29R71`) count, never other people's or bots'; Duet only replies inside a thread where Montique wrote something not addressed to someone else; never at the top level of a channel, never broadcast to the channel, and never with @here, @channel, @everyone or a group ping in its own text.
 
 ## Slack listener (optional)
 
 Claude can't be woken by Slack, but it is woken by a comment on a GitHub pull request it follows. So the server can also run a Slack Socket Mode listener (`listener.js`) that copies Montique's messages for Duet onto an inbox pull request as comments. Claude then sees each one within moments instead of at the next hourly poll, and answers with the tools above.
 
-It relays only Montique's own messages (`U0CL7D29R71`): every message in the Duet DM, and channel messages that @mention Duet or use @here. Bots, edits, deletes and everyone else are ignored, and each message is relayed once. The comment holds the channel id, ts, thread_ts and the text (cut at 1,500 characters), fenced so GitHub renders nothing in it. A failed comment is logged and never stops the MCP server. `/healthz` shows the listener's state.
+It relays only Montique's own messages (`U0CL7D29R71`): every message in the Duet DM, and every message in channels Duet is in, top level or in threads, except ones that @mention someone else but not Duet and have no @here. Bots, edits, deletes and everyone else are ignored, and each message is relayed once. The comment holds the channel id, ts, thread_ts and the text (cut at 1,500 characters), fenced so GitHub renders nothing in it. A failed comment is logged and never stops the MCP server. `/healthz` shows the listener's state.
 
 The listener starts only when `SLACK_APP_TOKEN`, `GITHUB_TOKEN` and `INBOX_PR` are all set. The inbox pull request is never merged; see `INBOX.md` on its branch.
 

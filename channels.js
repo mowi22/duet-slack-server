@@ -4,7 +4,9 @@
 // Rules, enforced here in code:
 // - Only channels Duet is a member of (public or private), never DMs here.
 // - Only messages Montique wrote count as triggers, never other people or bots.
-// - A trigger is a message that @mentions Duet or uses @here.
+// - A trigger is any message Montique writes, unless it @mentions someone
+//   else (not Duet) and has no @here: that one is addressed to someone else.
+//   kind is "mention" (@Duet), "here" (@here) or "general" (everything else).
 // - Duet only replies inside a thread where such a trigger exists. Never at
 //   the top level of a channel, never broadcast to the channel, never with
 //   @here, @channel, @everyone or a user-group ping in its own text.
@@ -28,6 +30,18 @@ export function toSlackTs(since) {
   const ms = Date.parse(s);
   if (Number.isNaN(ms)) throw new Error(`Can't read "since": ${s}. Use a Slack ts or an ISO date.`);
   return (ms / 1000).toFixed(6);
+}
+
+const OTHER_PING_RE = /<@[UW][A-Z0-9]+(\|[^>]*)?>|<!subteam\^/;
+
+// "mention", "here", "general", or undefined when the message is addressed to
+// someone else (it @mentions another user, bot or group, but not Duet, and has no @here).
+export function messageKind(text, duet = DUET_USER_FALLBACK) {
+  const t = text || "";
+  if (new RegExp(`<@${duet}(\\|[^>]*)?>`).test(t)) return "mention";
+  if (HERE_RE.test(t)) return "here";
+  if (OTHER_PING_RE.test(t)) return undefined;
+  return "general";
 }
 
 const iso = (ts) => new Date(Number(ts) * 1000).toISOString();
@@ -81,10 +95,8 @@ export function makeChannelTools(slack, { owner = OWNER, now = () => Date.now() 
 
   function triggerKind(m, who) {
     if (m.user !== owner || m.bot_id || !TRIGGER_SUBTYPES.has(m.subtype)) return undefined;
-    const text = m.text || "";
-    if (new RegExp(`<@${who.user}(\\|[^>]*)?>`).test(text)) return "mention";
-    if (HERE_RE.test(text)) return "here";
-    return undefined;
+    if (isDuet(m, who)) return undefined;
+    return messageKind(m.text, who.user);
   }
 
   function slim(m, who) {
@@ -199,7 +211,7 @@ export function makeChannelTools(slack, { owner = OWNER, now = () => Date.now() 
     const root = thread[0];
     const rootTs = root.thread_ts || root.ts;
     if (!thread.some((m) => triggerKind(m, who))) {
-      throw new Error("Montique hasn't @mentioned Duet or used @here in this thread, so Duet won't reply here.");
+      throw new Error("Montique hasn't written in this thread (or only addressed someone else), so Duet won't reply here.");
     }
     const data = await slack(
       "chat.postMessage",

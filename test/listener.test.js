@@ -14,24 +14,27 @@ test("classify: Montique in the Duet DM is relayed", () => {
   assert.equal(classify(msg({ channel: DM, subtype: "file_share", text: "" })), "dm");
 });
 
-test("classify: channel messages need a Duet mention or @here", () => {
+test("classify: channel messages are mention, here or general", () => {
   assert.equal(classify(msg({ text: `<@${D}> catch up` })), "mention");
   assert.equal(classify(msg({ text: `<@${D}|Duet> catch up` })), "mention");
   assert.equal(classify({ ...msg({ text: `hi <@${D}>` }), type: "app_mention" }), "mention");
   assert.equal(classify(msg({ text: "<!here> new shipment", thread_ts: "1795500000.1" })), "here");
   assert.equal(classify(msg({ text: "<!here|here> new shipment" })), "here");
-  assert.equal(classify(msg({ text: "no ping" })), null);
-  assert.equal(classify(msg({ text: "<!channel> loud" })), null);
+  assert.equal(classify(msg({ text: "no ping" })), "general");
+  assert.equal(classify(msg({ text: "the beans arrived", thread_ts: "1795500000.1" })), "general");
+  assert.equal(classify(msg({ subtype: "file_share", text: "" })), "general");
+  assert.equal(classify(msg({ text: "<!channel> loud" })), "general");
   assert.equal(classify(msg({ text: "<@U0OTHER> not Duet" })), null);
+  assert.equal(classify(msg({ text: "<!subteam^S1|@baristas> heads up" })), null);
 });
 
 test("classify: a literal @here word counts, not an email or a longer word", () => {
   assert.equal(classify(msg({ text: "@here everyone say hello don’t be shy", thread_ts: "1795561337.529099" })), "here");
   assert.equal(classify(msg({ text: "hey @HERE, look" })), "here");
   assert.equal(classify(msg({ text: "(@here)" })), "here");
-  assert.equal(classify(msg({ text: "write me@here.com" })), null);
-  assert.equal(classify(msg({ text: "@hereford cattle" })), null);
-  assert.equal(classify(msg({ text: "@@here" })), null);
+  assert.equal(classify(msg({ text: "write me@here.com" })), "general");
+  assert.equal(classify(msg({ text: "@hereford cattle" })), "general");
+  assert.equal(classify(msg({ text: "@@here" })), "general");
   assert.equal(classify(msg({ user: "U0OTHER", text: "@here hi" })), null);
 });
 

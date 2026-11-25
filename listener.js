@@ -9,18 +9,19 @@
 //
 // What gets relayed (everything else is ignored):
 // - a message Montique (U0CL7D29R71) writes in the Duet DM (D0CL9HPSCHM), or
-// - a message Montique writes in a channel Duet is in that @mentions Duet or uses @here.
+// - any message Montique writes in a channel Duet is in (top level or in a thread),
+//   unless it @mentions someone else but not Duet and has no @here.
 // Bots, edits, deletes, other people and other subtypes are never relayed.
 // Each Slack message is relayed once (deduped by channel + ts).
 
-import { OWNER, DUET_USER_FALLBACK, HERE_RE } from "./channels.js";
+import { OWNER, DUET_USER_FALLBACK, messageKind } from "./channels.js";
 
 export const DUET_DM = "D0CL9HPSCHM";
 const RELAY_SUBTYPES = new Set([undefined, "file_share", "thread_broadcast"]);
 const MAX_RELAY_TEXT = 1500;
 const GITHUB_API = "https://api.github.com";
 
-// Returns "dm", "mention" or "here" for a message worth relaying, else null.
+// Returns "dm", "mention", "here" or "general" for a message worth relaying, else null.
 export function classify(event, { owner = OWNER, duet = DUET_USER_FALLBACK, dm = DUET_DM } = {}) {
   if (!event || (event.type !== "message" && event.type !== "app_mention")) return null;
   if (!RELAY_SUBTYPES.has(event.subtype)) return null; // edits, deletes, bot_message, joins...
@@ -30,9 +31,7 @@ export function classify(event, { owner = OWNER, duet = DUET_USER_FALLBACK, dm =
   const text = event.text || "";
   if (event.channel === dm) return "dm";
   if (event.channel_type === "im" || event.channel_type === "mpim") return null; // other DMs
-  if (text.includes(`<@${duet}>`) || text.includes(`<@${duet}|`)) return "mention";
-  if (HERE_RE.test(text)) return "here";
-  return null;
+  return messageKind(text, duet) || null;
 }
 
 // Remembers the last `max` keys. has/add/delete.
