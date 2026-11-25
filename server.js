@@ -7,6 +7,12 @@
 //                      channels:read, groups:read)
 //   MCP_SECRET        long random string; the connector URL is /mcp/<MCP_SECRET>
 //   PORT              set by Railway
+//   SLACK_APP_TOKEN   optional xapp-... app-level token (connections:write). With GITHUB_TOKEN
+//                     and INBOX_PR it turns on the Slack listener (listener.js), which comments
+//                     on the inbox pull request when Montique messages Duet.
+//   GITHUB_TOKEN      fine-grained token for INBOX_REPO, Pull requests: read and write
+//   INBOX_REPO        default mowi22/duet-slack-server
+//   INBOX_PR          the inbox pull request's number
 //
 // read_dm and post_reply only ever touch one channel: the DM between Montique and Duet.
 // find_mentions, read_thread and post_thread_reply work in channels Duet is a member of,
@@ -18,6 +24,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import { makeChannelTools, toSlackTs } from "./channels.js";
+import { startListener, listenerState } from "./listener.js";
 
 const CHANNEL = "D0CL9HPSCHM"; // Montique <> Duet DM. Hard-coded on purpose.
 const SLACK_API = "https://slack.com/api";
@@ -86,7 +93,7 @@ const asText = (obj) => ({ content: [{ type: "text", text: JSON.stringify(obj, n
 const channels = makeChannelTools(slack);
 
 function buildServer() {
-  const server = new McpServer({ name: "duet-slack", version: "1.1.0" });
+  const server = new McpServer({ name: "duet-slack", version: "1.2.0" });
 
   server.registerTool(
     "read_dm",
@@ -218,7 +225,7 @@ const app = express();
 app.disable("x-powered-by");
 app.use(express.json({ limit: "256kb" }));
 
-app.get("/healthz", (_req, res) => res.json({ ok: true }));
+app.get("/healthz", (_req, res) => res.json({ ok: true, listener: listenerState.status }));
 
 // Secret in the path (what Claude custom connectors can carry), or as a Bearer header.
 function auth(req, res, next) {
@@ -257,4 +264,9 @@ for (const path of ["/mcp/:secret", "/mcp"]) {
 
 app.use((_req, res) => res.status(404).json({ error: "not found" }));
 
-app.listen(PORT, () => console.log(`duet-slack MCP listening on :${PORT}`));
+process.on("unhandledRejection", (err) => console.error("Unhandled rejection:", err?.message || err));
+
+app.listen(PORT, () => {
+  console.log(`duet-slack MCP listening on :${PORT}`);
+  startListener();
+});

@@ -1,6 +1,6 @@
 {
   "name": "duet-slack-server",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Remote MCP server so Claude can read and reply as Duet in Slack (DM and channel threads)",
   "main": "server.js",
   "scripts": {
@@ -10,6 +10,7 @@
   "license": "UNLICENSED",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
+    "@slack/socket-mode": "^3.2.0",
     "express": "^5.3.0",
     "zod": "^4.6.7"
   },
