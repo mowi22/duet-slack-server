@@ -1,0 +1,20 @@
+{
+  "name": "duet-slack-server",
+  "version": "1.0.0",
+  "description": "Remote MCP server so Claude can read and reply in the Duet Slack DM",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "express": "^5.3.0",
+    "zod": "^4.6.7"
+  },
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  }
+}
