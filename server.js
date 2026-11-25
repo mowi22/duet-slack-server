@@ -93,7 +93,7 @@ const asText = (obj) => ({ content: [{ type: "text", text: JSON.stringify(obj, n
 const channels = makeChannelTools(slack);
 
 function buildServer() {
-  const server = new McpServer({ name: "duet-slack", version: "1.2.0" });
+  const server = new McpServer({ name: "duet-slack", version: "1.3.0" });
 
   server.registerTool(
     "read_dm",

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classify, makeDeduper, formatComment, makeInbox, makeHandler, truncate, startListener } from "../listener.js";
+import { classify, botName, makeDeduper, formatComment, makeInbox, makeHandler, truncate, startListener } from "../listener.js";
 
 const M = "U0CL7D29R71";
 const D = "U0CLQPCQBCJ";
@@ -41,13 +41,43 @@ test("classify: a literal @here word counts, not an email or a longer word", () 
 test("classify: ignores other people, bots, edits, deletes and other DMs", () => {
   assert.equal(classify(msg({ user: "U0OTHER", text: `<@${D}> hi` })), null);
   assert.equal(classify(msg({ channel: DM, user: "U0OTHER", text: "hi" })), null);
-  assert.equal(classify(msg({ bot_id: "BMUSE", text: `<@${D}> hi` })), null);
-  assert.equal(classify(msg({ subtype: "bot_message", text: `<@${D}> hi` })), null);
+  assert.equal(classify(msg({ user: "U0MUSE", bot_id: "BMUSE", text: "no mention" })), null);
   assert.equal(classify(msg({ subtype: "message_changed", text: `<@${D}> hi` })), null);
   assert.equal(classify(msg({ subtype: "message_deleted" })), null);
   assert.equal(classify(msg({ channel: "D0OTHERDM", channel_type: "im", text: `<@${D}> hi` })), null);
   assert.equal(classify({ type: "reaction_added", user: M }), null);
   assert.equal(classify(undefined), null);
+});
+
+const bot = (o) => ({ type: "message", channel: CH, ts: "1795600000.000200", user: "U0MUSE", bot_id: "BMUSE", bot_profile: { name: "Muse" }, text: "", ...o });
+
+test("classify: another bot's @Duet mention in a channel is relayed", () => {
+  assert.equal(classify(bot({ text: `<@${D}> can you check the vault?` })), "bot-mention");
+  assert.equal(classify(bot({ text: `hey <@${D}|Duet>`, thread_ts: "1795500000.1" })), "bot-mention");
+  assert.equal(classify({ ...bot({ text: `<@${D}> hi` }), type: "app_mention" }), "bot-mention");
+  assert.equal(classify({ type: "message", subtype: "bot_message", channel: CH, ts: "1.2", bot_id: "BGROK", username: "Grokbot", text: `<@${D}> ping` }), "bot-mention");
+});
+
+test("classify: bots without a Duet mention, Duet itself, bot DMs and bot edits are ignored", () => {
+  assert.equal(classify(bot({ text: "general chatter" })), null);
+  assert.equal(classify(bot({ text: "<!here> heads up" })), null);
+  assert.equal(classify(bot({ text: "@here heads up" })), null);
+  assert.equal(classify(bot({ text: "<@U0OTHER> not Duet" })), null);
+  assert.equal(classify(bot({ user: D, bot_profile: { name: "Duet" }, text: `<@${D}> self` })), null);
+  assert.equal(classify(bot({ user: "U0X", bot_profile: { name: "duet" }, text: `<@${D}> self` })), null);
+  assert.equal(classify(bot({ channel: DM, text: `<@${D}> hi` })), null);
+  assert.equal(classify(bot({ channel: "D0OTHER", channel_type: "im", text: `<@${D}> hi` })), null);
+  assert.equal(classify(bot({ subtype: "message_changed", text: `<@${D}> hi` })), null);
+});
+
+test("botName and formatComment label the sending bot", () => {
+  assert.equal(botName(bot({})), "Muse");
+  assert.equal(botName({ bot_id: "BGROK", username: "Grokbot" }), "Grokbot");
+  assert.equal(botName({ bot_id: "BX" }), "BX");
+  assert.equal(botName(msg({})), "");
+  const body = formatComment(bot({ text: `<@${D}> hi`, bot_profile: { name: "Mu`se\nx" } }), "bot-mention");
+  assert.match(body, /^\*\*Relayed Slack message\*\* \(bot-mention\) · channel `C0CL7EC8TLP` · ts `1795600000\.000200` · thread_ts `none` · from bot `Musex`\n/);
+  assert.doesNotMatch(formatComment(msg({ text: "hi" }), "general"), /from bot/);
 });
 
 test("deduper forgets the oldest past its size", () => {
