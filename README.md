@@ -13,7 +13,7 @@ Channel tools (`channels.js`), limited to public and private channels Duet is a 
 - `read_thread(channel, thread_ts, limit?)` reads a whole thread. `thread_ts` can be the parent's or any reply's ts.
 - `post_thread_reply(channel, thread_ts, text)` replies as Duet inside that thread.
 
-Rules enforced in code: only Montique's own messages (`U0CL7D29R71`) count, never other people's or bots'; Duet only replies inside a thread where Montique wrote something not addressed to someone else; never at the top level of a channel, never broadcast to the channel, and never with @here, @channel, @everyone or a group ping in its own text.
+Rules enforced in code: only Montique's own messages (`U0CL7D29R71`) count, plus another bot's message that explicitly @mentions Duet (Montique allowed Duet to answer other agents' tags); other people never count, and bots never without a Duet tag; Duet only replies inside a thread where Montique wrote something not addressed to someone else, or where another bot @mentioned Duet; never at the top level of a channel, never broadcast to the channel, and never with @here, @channel, @everyone or a group ping in its own text.
 
 ## Slack listener (optional)
 

@@ -45,21 +45,42 @@ const world = () =>
     replies: { [parent.ts]: [parent, r1, r2, r3], [topHere.ts]: [topHere], [r1.ts]: [parent, r1, r2, r3] },
   });
 
-test("find_mentions finds Montique's mention in an older thread, @here and general messages at top level", async () => {
+test("find_mentions finds Montique's mention in an older thread, a bot's @Duet, @here and general messages at top level", async () => {
   const { slack } = world();
   const tools = makeChannelTools(slack, { now: () => NOW });
   const out = await tools.findMentions({ since: "1795580000" });
-  assert.equal(out.count, 3);
-  const [a, b, c] = out.mentions;
+  assert.equal(out.count, 4);
+  const [a, bot, b, c] = out.mentions;
   assert.deepEqual([a.ts, a.thread_ts, a.in_thread, a.kind, a.answered, a.channel_name], [r1.ts, parent.ts, true, "mention", false, "coffee"]);
+  assert.deepEqual([bot.ts, bot.thread_ts, bot.kind, bot.from], [r2.ts, parent.ts, "bot-mention", "bot:BMUSE"]);
   assert.deepEqual([b.ts, b.thread_ts, b.in_thread, b.kind], [topHere.ts, topHere.ts, false, "here"]);
   assert.deepEqual([c.ts, c.thread_ts, c.in_thread, c.kind], [topPlain.ts, topPlain.ts, false, "general"]);
+  assert.equal(a.from, undefined);
 });
 
-test("find_mentions ignores other people's and bots' messages and old ones", async () => {
-  const { slack } = world();
+test("find_mentions ignores other people, bots without a Duet tag, Duet itself and old ones", async () => {
+  const botChat = { ts: "1795594000.000250", thread_ts: parent.ts, user: "U0BOT", bot_id: "BMUSE", text: "<!here> Muse update" };
+  const duetSelf = { ts: "1795595000.000260", thread_ts: parent.ts, user: D, bot_id: "BDUET", text: `<@${D}> note to self` };
+  const { slack } = fakeSlack({
+    channels: [{ id: coffee, name: "coffee" }],
+    history: { [coffee]: [parent, oldMention] },
+    replies: { [parent.ts]: [parent, botChat, duetSelf, r3] },
+  });
   const out = await makeChannelTools(slack, { now: () => NOW }).findMentions({ since: "1795580000" });
-  assert.ok(!out.mentions.some((m) => [r2.ts, r3.ts, oldMention.ts].includes(m.ts)));
+  assert.ok(!out.mentions.some((m) => [botChat.ts, duetSelf.ts, r3.ts, oldMention.ts].includes(m.ts)));
+});
+
+test("post_thread_reply answers in a thread where another agent tagged Duet", async () => {
+  const grok = { ts: "1795594500.000270", thread_ts: parent.ts, subtype: "bot_message", bot_id: "BGROK", username: "Grokbot", text: `<@${D}> can you check stock?` };
+  const { slack, posts } = fakeSlack({
+    channels: [{ id: coffee, name: "coffee" }],
+    history: {},
+    replies: { [parent.ts]: [parent, grok, r3] },
+  });
+  const out = await makeChannelTools(slack, { now: () => NOW }).postThreadReply({ channel: coffee, thread_ts: parent.ts, text: "Checking." });
+  assert.equal(out.thread_ts, parent.ts);
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].reply_broadcast, false);
 });
 
 test("find_mentions marks a mention answered when Duet replied after it", async () => {
@@ -105,7 +126,7 @@ test("post_thread_reply refuses without a trigger, without thread_ts, with @here
   const { slack, posts } = fakeSlack({
     channels: [{ id: coffee, name: "coffee" }],
     history: {},
-    replies: { [parent.ts]: [parent, r2, r3], [toOther.ts]: [toOther] },
+    replies: { [parent.ts]: [parent, { ...r2, text: "Muse here, no tag" }, r3], [toOther.ts]: [toOther] },
   });
   const t = makeChannelTools(slack, { now: () => NOW });
   await assert.rejects(t.postThreadReply({ channel: coffee, thread_ts: parent.ts, text: "x" }), /hasn't written/);

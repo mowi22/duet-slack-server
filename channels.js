@@ -3,10 +3,12 @@
 //
 // Rules, enforced here in code:
 // - Only channels Duet is a member of (public or private), never DMs here.
-// - Only messages Montique wrote count as triggers, never other people or bots.
-// - A trigger is any message Montique writes, unless it @mentions someone
-//   else (not Duet) and has no @here: that one is addressed to someone else.
+// - Triggers: any message Montique writes, unless it @mentions someone else
+//   (not Duet) and has no @here: that one is addressed to someone else.
 //   kind is "mention" (@Duet), "here" (@here) or "general" (everything else).
+//   Also another bot's message that explicitly @mentions Duet (kind
+//   "bot-mention"; Montique allowed Duet to answer other agents' tags).
+//   Other people never count, and bots only with an explicit @Duet.
 // - Duet only replies inside a thread where such a trigger exists. Never at
 //   the top level of a channel, never broadcast to the channel, never with
 //   @here, @channel, @everyone or a user-group ping in its own text.
@@ -15,6 +17,7 @@ export const OWNER = "U0CL7D29R71"; // Montique
 export const DUET_USER_FALLBACK = "U0CLQPCQBCJ";
 
 const TRIGGER_SUBTYPES = new Set([undefined, "thread_broadcast", "file_share"]);
+const BOT_SUBTYPES = new Set([undefined, "bot_message", "thread_broadcast", "file_share"]);
 // @here as Slack encodes it (<!here>), or typed as a plain word: Slack doesn't
 // always encode @here in thread replies, so the raw text can be literally "@here".
 export const HERE_RE = /<!here(\|[^>]*)?>|(^|[^\w@.])@here\b/i;
@@ -93,9 +96,17 @@ export function makeChannelTools(slack, { owner = OWNER, now = () => Date.now() 
 
   const isDuet = (m, who) => m.user === who.user || (who.bot && m.bot_id === who.bot);
 
+  const isBot = (m) => Boolean(m.bot_id || m.bot_profile || m.subtype === "bot_message");
+  const botLabel = (m) => m.bot_profile?.name || m.username || m.bot_id || "bot";
+
   function triggerKind(m, who) {
-    if (m.user !== owner || m.bot_id || !TRIGGER_SUBTYPES.has(m.subtype)) return undefined;
     if (isDuet(m, who)) return undefined;
+    if (isBot(m)) {
+      // Another agent tagging Duet. Never Duet itself, so bots can't loop.
+      if (!BOT_SUBTYPES.has(m.subtype) || /^duet$/i.test(botLabel(m))) return undefined;
+      return new RegExp(`<@${who.user}(\\|[^>]*)?>`).test(m.text || "") ? "bot-mention" : undefined;
+    }
+    if (m.user !== owner || !TRIGGER_SUBTYPES.has(m.subtype)) return undefined;
     return messageKind(m.text, who.user);
   }
 
@@ -106,7 +117,7 @@ export function makeChannelTools(slack, { owner = OWNER, now = () => Date.now() 
       from: isDuet(m, who)
         ? "duet"
         : m.bot_id
-          ? `bot:${m.bot_profile?.name || m.username || m.bot_id}`
+          ? `bot:${botLabel(m)}`
           : m.user || "unknown",
       text: m.text || "",
       thread_ts: m.thread_ts && m.thread_ts !== m.ts ? m.thread_ts : undefined,
@@ -163,6 +174,7 @@ export function makeChannelTools(slack, { owner = OWNER, now = () => Date.now() 
           thread_ts: threadTs,
           in_thread: inThread,
           kind,
+          from: kind === "bot-mention" ? `bot:${botLabel(m)}` : undefined,
           text: m.text || "",
           files: m.files?.length ? m.files.map((f) => f.name) : undefined,
           answered: later.some((r) => isDuet(r, who) && Number(r.ts) > Number(m.ts)),
@@ -211,7 +223,9 @@ export function makeChannelTools(slack, { owner = OWNER, now = () => Date.now() 
     const root = thread[0];
     const rootTs = root.thread_ts || root.ts;
     if (!thread.some((m) => triggerKind(m, who))) {
-      throw new Error("Montique hasn't written in this thread (or only addressed someone else), so Duet won't reply here.");
+      throw new Error(
+        "Montique hasn't written in this thread (or only addressed someone else), and no other agent tagged Duet here, so Duet won't reply here."
+      );
     }
     const data = await slack(
       "chat.postMessage",
