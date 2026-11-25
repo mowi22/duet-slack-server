@@ -1,18 +1,23 @@
 // Duet Slack server: a small remote MCP server (Streamable HTTP) that lets
-// Claude read and reply in one Slack DM as the "Duet" app.
+// Claude read and reply as the "Duet" app in Slack.
 //
 // Env:
-//   SLACK_BOT_TOKEN   xoxb-... bot token of the Duet app (scopes: chat:write, im:history)
+//   SLACK_BOT_TOKEN   xoxb-... bot token of the Duet app
+//                     (scopes: chat:write, im:history, channels:history, groups:history,
+//                      channels:read, groups:read)
 //   MCP_SECRET        long random string; the connector URL is /mcp/<MCP_SECRET>
 //   PORT              set by Railway
 //
-// Both tools only ever touch one channel: the DM between Montique and Duet.
+// read_dm and post_reply only ever touch one channel: the DM between Montique and Duet.
+// find_mentions, read_thread and post_thread_reply work in channels Duet is a member of,
+// and only reply in threads where Montique @mentioned Duet or used @here (see channels.js).
 
 import crypto from "node:crypto";
 import express from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+import { makeChannelTools, toSlackTs } from "./channels.js";
 
 const CHANNEL = "D0CL9HPSCHM"; // Montique <> Duet DM. Hard-coded on purpose.
 const SLACK_API = "https://slack.com/api";
@@ -62,16 +67,6 @@ async function slack(method, params, { post = false } = {}) {
   throw new Error(`Slack ${method} failed: rate limited`);
 }
 
-// Accepts a Slack ts ("1732495200.000100"), unix seconds, or an ISO date.
-function toSlackTs(since) {
-  if (since === undefined || since === null || since === "") return undefined;
-  const s = String(since).trim();
-  if (/^\d+(\.\d+)?$/.test(s)) return s;
-  const ms = Date.parse(s);
-  if (Number.isNaN(ms)) throw new Error(`Can't read "since": ${s}. Use a Slack ts or an ISO date.`);
-  return (ms / 1000).toFixed(6);
-}
-
 function slim(m) {
   return {
     ts: m.ts,
@@ -88,8 +83,10 @@ const asText = (obj) => ({ content: [{ type: "text", text: JSON.stringify(obj, n
 
 // ---------- MCP server ----------
 
+const channels = makeChannelTools(slack);
+
 function buildServer() {
-  const server = new McpServer({ name: "duet-slack", version: "1.0.0" });
+  const server = new McpServer({ name: "duet-slack", version: "1.1.0" });
 
   server.registerTool(
     "read_dm",
@@ -141,6 +138,68 @@ function buildServer() {
       );
       return asText({ ok: true, channel: CHANNEL, ts: data.ts, thread_ts: thread_ts || undefined });
     }
+  );
+
+  server.registerTool(
+    "find_mentions",
+    {
+      title: "Find Montique's channel messages for Duet",
+      description:
+        "Find messages Montique wrote since a time, in Slack channels Duet is a member of, that @mention Duet " +
+        "or use @here. Includes replies inside threads. Only Montique's messages count; other people and bots are ignored. " +
+        "Each result has channel, ts, thread_ts (reply under this with post_thread_reply), in_thread, kind " +
+        "('mention' or 'here'), text, and answered (Duet already replied in that thread after it). " +
+        "Use checked_at as the next since.",
+      inputSchema: {
+        since: z.string().optional().describe("Only messages after this Slack ts or ISO date. Default: 24 hours ago."),
+        lookback_days: z
+          .number()
+          .int()
+          .min(1)
+          .max(30)
+          .optional()
+          .describe("How far back to look for thread parents whose replies may be new. Default 7."),
+        channel: z.string().optional().describe("Only look in this channel id."),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async (args) => asText(await channels.findMentions(args))
+  );
+
+  server.registerTool(
+    "read_thread",
+    {
+      title: "Read a channel thread",
+      description:
+        "Read a whole Slack thread, oldest first, in a channel Duet is a member of. " +
+        "thread_ts can be the parent's ts or any reply's ts. from is 'duet' for Duet, 'bot:<name>' for other bots, " +
+        "otherwise the Slack user id.",
+      inputSchema: {
+        channel: z.string().describe("Channel id (C... or G...)."),
+        thread_ts: z.string().describe("ts of the thread's parent or of a reply in it."),
+        limit: z.number().int().min(2).max(1000).optional().describe("Max messages, default 200. Keeps the parent and newest replies."),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async (args) => asText(await channels.readThread(args))
+  );
+
+  server.registerTool(
+    "post_thread_reply",
+    {
+      title: "Reply as Duet in a channel thread",
+      description:
+        "Post a reply as Duet inside a thread in a Slack channel Duet is a member of. thread_ts is required; " +
+        "Duet never posts at the top level of a channel. Only works in a thread where Montique @mentioned Duet " +
+        "or used @here. The reply can't use @here, @channel or @everyone and isn't sent to the channel. Slack mrkdwn.",
+      inputSchema: {
+        channel: z.string().describe("Channel id (C... or G...)."),
+        thread_ts: z.string().describe("ts of the thread's parent, or of Montique's message to start a thread under."),
+        text: z.string().min(1).max(MAX_TEXT).describe("Reply text."),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async (args) => asText(await channels.postThreadReply(args))
   );
 
   return server;

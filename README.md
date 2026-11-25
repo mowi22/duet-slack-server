@@ -1,11 +1,19 @@
 # Duet Slack server
 
-A small remote MCP server that lets Claude read and reply in one Slack DM (Montique and the **Duet** app, channel `D0CL9HPSCHM`) as Duet. Claude reaches it as a custom connector.
+A small remote MCP server that lets Claude read and reply as the **Duet** app in Slack: in Montique's DM with Duet (channel `D0CL9HPSCHM`), and in channel threads where Montique @mentions Duet or uses @here. Claude reaches it as a custom connector.
 
-It has two tools, both locked to that one channel in code:
+DM tools, locked to that one DM in code:
 
 - `read_dm(since?, limit?, thread_ts?)` reads messages (conversations.history, or conversations.replies for a thread).
 - `post_reply(text, thread_ts?)` posts as Duet (chat.postMessage).
+
+Channel tools (`channels.js`), limited to public and private channels Duet is a member of:
+
+- `find_mentions(since?, lookback_days?, channel?)` finds Montique's messages since a time that @mention Duet or contain @here, at the top level or inside threads (it also opens recent threads whose parent is older, up to `lookback_days`, default 7). Each result has `channel`, `ts`, `thread_ts` (where to reply), `in_thread`, `kind` (`mention` or `here`), `text` and `answered` (Duet already replied after it). `checked_at` is the next `since`.
+- `read_thread(channel, thread_ts, limit?)` reads a whole thread. `thread_ts` can be the parent's or any reply's ts.
+- `post_thread_reply(channel, thread_ts, text)` replies as Duet inside that thread.
+
+Rules enforced in code: only Montique's own messages (`U0CL7D29R71`) count, never other people's or bots'; Duet only replies inside a thread where Montique mentioned it or used @here; never at the top level of a channel, never broadcast to the channel, and never with @here, @channel, @everyone or a group ping in its own text.
 
 There is no event listener. Claude can't be woken by Slack, so it reads the DM when it runs and polls with `read_dm`. That's why only a bot token is needed: no Socket Mode, no app-level (`xapp-`) token, no Events API URL.
 
@@ -23,10 +31,11 @@ Claude's custom connectors take a URL and, optionally, OAuth. This server keeps 
 
 ## Slack app setup (api.slack.com/apps > Duet)
 
-1. **OAuth & Permissions > Bot Token Scopes:** add `chat:write` and `im:history`.
+1. **OAuth & Permissions > Bot Token Scopes:** add `chat:write`, `im:history`, `channels:history`, `groups:history`, `channels:read` and `groups:read`.
 2. Reinstall the app to the workspace (Slack prompts after a scope change).
 3. **App Home:** turn on the Messages tab.
-4. Copy the Bot User OAuth Token (`xoxb-...`) into Railway as `SLACK_BOT_TOKEN`.
+4. Copy the Bot User OAuth Token (`xoxb-...`) into Railway as `SLACK_BOT_TOKEN`. Reinstalling usually keeps the same token; if it changes, update the variable.
+5. In each channel Duet should answer in, run `/invite @Duet`.
 
 ## Deploy on Railway
 
@@ -38,6 +47,12 @@ Claude's custom connectors take a URL and, optionally, OAuth. This server keeps 
 ## Add to Claude
 
 Settings > Connectors > Add custom connector. Name it `Duet Slack`, URL `https://<domain>/mcp/<MCP_SECRET>`. No OAuth fields.
+
+## Tests
+
+```
+npm test
+```
 
 ## Local run
 
