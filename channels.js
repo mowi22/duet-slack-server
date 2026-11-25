@@ -13,7 +13,9 @@ export const OWNER = "U0CL7D29R71"; // Montique
 export const DUET_USER_FALLBACK = "U0CLQPCQBCJ";
 
 const TRIGGER_SUBTYPES = new Set([undefined, "thread_broadcast", "file_share"]);
-const HERE_RE = /<!here(\|[^>]*)?>/;
+// @here as Slack encodes it (<!here>), or typed as a plain word: Slack doesn't
+// always encode @here in thread replies, so the raw text can be literally "@here".
+export const HERE_RE = /<!here(\|[^>]*)?>|(^|[^\w@.])@here\b/i;
 const BROADCAST_RE = /<!(here|channel|everyone)(\|[^>]*)?>|<!subteam\^/;
 const MAX_THREADS_PER_CHANNEL = 50;
 const DAY = 86400;

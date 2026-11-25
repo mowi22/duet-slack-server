@@ -25,6 +25,16 @@ test("classify: channel messages need a Duet mention or @here", () => {
   assert.equal(classify(msg({ text: "<@U0OTHER> not Duet" })), null);
 });
 
+test("classify: a literal @here word counts, not an email or a longer word", () => {
+  assert.equal(classify(msg({ text: "@here everyone say hello don’t be shy", thread_ts: "1795561337.529099" })), "here");
+  assert.equal(classify(msg({ text: "hey @HERE, look" })), "here");
+  assert.equal(classify(msg({ text: "(@here)" })), "here");
+  assert.equal(classify(msg({ text: "write me@here.com" })), null);
+  assert.equal(classify(msg({ text: "@hereford cattle" })), null);
+  assert.equal(classify(msg({ text: "@@here" })), null);
+  assert.equal(classify(msg({ user: "U0OTHER", text: "@here hi" })), null);
+});
+
 test("classify: ignores other people, bots, edits, deletes and other DMs", () => {
   assert.equal(classify(msg({ user: "U0OTHER", text: `<@${D}> hi` })), null);
   assert.equal(classify(msg({ channel: DM, user: "U0OTHER", text: "hi" })), null);

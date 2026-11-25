@@ -13,11 +13,10 @@
 // Bots, edits, deletes, other people and other subtypes are never relayed.
 // Each Slack message is relayed once (deduped by channel + ts).
 
-import { OWNER, DUET_USER_FALLBACK } from "./channels.js";
+import { OWNER, DUET_USER_FALLBACK, HERE_RE } from "./channels.js";
 
 export const DUET_DM = "D0CL9HPSCHM";
 const RELAY_SUBTYPES = new Set([undefined, "file_share", "thread_broadcast"]);
-const HERE_RE = /<!here(\|[^>]*)?>/;
 const MAX_RELAY_TEXT = 1500;
 const GITHUB_API = "https://api.github.com";
 

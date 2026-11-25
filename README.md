@@ -9,7 +9,7 @@ DM tools, locked to that one DM in code:
 
 Channel tools (`channels.js`), limited to public and private channels Duet is a member of:
 
-- `find_mentions(since?, lookback_days?, channel?)` finds Montique's messages since a time that @mention Duet or contain @here, at the top level or inside threads (it also opens recent threads whose parent is older, up to `lookback_days`, default 7). Each result has `channel`, `ts`, `thread_ts` (where to reply), `in_thread`, `kind` (`mention` or `here`), `text` and `answered` (Duet already replied after it). `checked_at` is the next `since`.
+- `find_mentions(since?, lookback_days?, channel?)` finds Montique's messages since a time that @mention Duet or contain @here (encoded or typed as a plain word), at the top level or inside threads (it also opens recent threads whose parent is older, up to `lookback_days`, default 7). Each result has `channel`, `ts`, `thread_ts` (where to reply), `in_thread`, `kind` (`mention` or `here`), `text` and `answered` (Duet already replied after it). `checked_at` is the next `since`.
 - `read_thread(channel, thread_ts, limit?)` reads a whole thread. `thread_ts` can be the parent's or any reply's ts.
 - `post_thread_reply(channel, thread_ts, text)` replies as Duet inside that thread.
 

@@ -114,3 +114,19 @@ test("post_thread_reply refuses without a trigger, without thread_ts, with @here
   await assert.rejects(t.postThreadReply({ channel: "D0CL9HPSCHM", thread_ts: parent.ts, text: "x" }), /post_reply/);
   assert.equal(posts.length, 0);
 });
+
+test("find_mentions and post_thread_reply accept a literal @here typed in a thread reply", async () => {
+  // Slack sometimes leaves @here unencoded in thread replies (seen in #coffee).
+  const literal = { ts: "1795590500.000150", thread_ts: parent.ts, user: M, text: "@here everyone say hello don’t be shy" };
+  const { slack, posts } = fakeSlack({
+    channels: [{ id: coffee, name: "coffee" }],
+    history: { [coffee]: [{ ...parent, latest_reply: literal.ts }] },
+    replies: { [parent.ts]: [parent, literal] },
+  });
+  const t = makeChannelTools(slack, { now: () => NOW });
+  const out = await t.findMentions({ since: "1795580000" });
+  assert.equal(out.count, 1);
+  assert.deepEqual([out.mentions[0].ts, out.mentions[0].kind, out.mentions[0].thread_ts], [literal.ts, "here", parent.ts]);
+  await t.postThreadReply({ channel: coffee, thread_ts: parent.ts, text: "Hello!" });
+  assert.equal(posts.length, 1);
+});
