@@ -136,3 +136,43 @@ test("startListener stays off without settings", async () => {
   assert.equal(await startListener({ SLACK_APP_TOKEN: "xapp-1", GITHUB_TOKEN: "g" }, quiet), null);
   assert.equal(await startListener({ SLACK_APP_TOKEN: "xapp-1", GITHUB_TOKEN: "g", INBOX_PR: "abc" }, quiet), null);
 });
+
+test("the Slack client loads and constructs on this Node version", async () => {
+  const { SocketModeClient, LogLevel } = await import("@slack/socket-mode");
+  const client = new SocketModeClient({ appToken: "xapp-1-test", logLevel: LogLevel.ERROR });
+  assert.equal(typeof client.start, "function");
+});
+
+// Railway picks the Node version from engines.node. Every installed package's
+// minimum Node must be at or below ours, or it can fail to load in production
+// (undici 8 needs 22.19; Railway's Node 20 broke the listener).
+test("engines.node covers every installed dependency's minimum Node", async () => {
+  const { readFile, readdir } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const root = new URL("..", import.meta.url).pathname;
+  const min = (range) => {
+    const m = /^\s*>=?\s*v?(\d+)(?:\.(\d+))?(?:\.(\d+))?\s*$/.exec(range || "");
+    return m ? [Number(m[1]), Number(m[2] || 0), Number(m[3] || 0)] : null;
+  };
+  const cmp = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+  const ours = min(JSON.parse(await readFile(join(root, "package.json"), "utf8")).engines.node);
+  assert.ok(ours, "engines.node should be a >= range");
+  const dirs = [];
+  for (const name of await readdir(join(root, "node_modules"))) {
+    if (name.startsWith(".")) continue;
+    if (name.startsWith("@")) for (const sub of await readdir(join(root, "node_modules", name))) dirs.push(`${name}/${sub}`);
+    else dirs.push(name);
+  }
+  const tooNew = [];
+  for (const dir of dirs) {
+    let pkg;
+    try {
+      pkg = JSON.parse(await readFile(join(root, "node_modules", dir, "package.json"), "utf8"));
+    } catch {
+      continue;
+    }
+    const theirs = min(pkg.engines?.node);
+    if (theirs && cmp(theirs, ours) > 0) tooNew.push(`${dir} needs ${pkg.engines.node}`);
+  }
+  assert.deepEqual(tooNew, []);
+});

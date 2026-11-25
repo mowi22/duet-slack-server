@@ -182,7 +182,7 @@ export async function startListener(env = process.env, log = console) {
     return client;
   } catch (err) {
     listenerState.status = "failed";
-    log.error("Slack listener failed to start:", err.message);
+    log.error("Slack listener failed to start:", err.stack || err.message);
     return null;
   }
 }
